@@ -1,0 +1,410 @@
+{
+  "info": {
+    "name": "Setu Payment Reconciliation Service",
+    "description": "Complete API collection for the Setu payment reconciliation service.\n\nSet the `base_url` variable to your deployment URL (default: http://localhost:8000).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "setu-recon-v1"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "tx_id",
+      "value": "",
+      "type": "string",
+      "description": "Set after running 'Ingest: payment_initiated'"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Service health check. Returns 200 with version info."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "item": [
+        {
+          "name": "Ingest: payment_initiated",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-demo-001\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"txn-demo-001\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"QuickMart\",\n  \"amount\": 4999.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-15T10:00:00+00:00\"\n}"
+            },
+            "description": "Creates a new transaction in 'initiated' state."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Created or duplicate', () => pm.expect(['created','duplicate']).to.include(r.status));",
+                  "pm.collectionVariables.set('tx_id', r.transaction_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest: payment_processed",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-demo-002\",\n  \"event_type\": \"payment_processed\",\n  \"transaction_id\": \"txn-demo-001\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"QuickMart\",\n  \"amount\": 4999.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-15T10:03:00+00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingest: settled",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-demo-003\",\n  \"event_type\": \"settled\",\n  \"transaction_id\": \"txn-demo-001\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"QuickMart\",\n  \"amount\": 4999.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-15T14:00:00+00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Ingest: payment_failed",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-demo-fail-001\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"txn-demo-fail-001\",\n  \"merchant_id\": \"merchant_2\",\n  \"merchant_name\": \"FreshBasket\",\n  \"amount\": 1200.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-16T09:00:00+00:00\"\n}"
+            },
+            "description": "First ingest initiation for a transaction that will fail."
+          }
+        },
+        {
+          "name": "Ingest: Duplicate (idempotency test)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-demo-001\",\n  \"event_type\": \"payment_initiated\",\n  \"transaction_id\": \"txn-demo-001\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"QuickMart\",\n  \"amount\": 4999.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-15T10:00:00+00:00\"\n}"
+            },
+            "description": "Re-submits evt-demo-001. Should return status=duplicate."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns duplicate status', () => pm.expect(pm.response.json().status).to.eql('duplicate'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest: Invalid event type (422)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/events",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-bad-001\",\n  \"event_type\": \"unknown_event\",\n  \"transaction_id\": \"txn-bad-001\",\n  \"merchant_id\": \"merchant_1\",\n  \"merchant_name\": \"QuickMart\",\n  \"amount\": 100.00,\n  \"currency\": \"INR\",\n  \"timestamp\": \"2026-01-15T10:00:00+00:00\"\n}"
+            },
+            "description": "Should return HTTP 422 Unprocessable Entity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('422 validation error', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "GET /transactions (all, paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/transactions?page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "10"}
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Has total', () => pm.expect(r.total).to.be.a('number'));",
+                  "pm.test('Has items array', () => pm.expect(r.items).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /transactions?merchant_id=merchant_1",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/transactions?merchant_id=merchant_1&page=1&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {"key": "merchant_id", "value": "merchant_1"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "5"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /transactions?status=failed",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/transactions?status=failed&page=1&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {"key": "status", "value": "failed"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "5"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /transactions?status=settled&sort_by=amount&sort_order=desc",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/transactions?status=settled&sort_by=amount&sort_order=desc&page=1&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {"key": "status", "value": "settled"},
+                {"key": "sort_by", "value": "amount"},
+                {"key": "sort_order", "value": "desc"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "5"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /transactions?date_from=2026-01-01&date_to=2026-02-01",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/transactions?date_from=2026-01-01T00:00:00Z&date_to=2026-02-01T00:00:00Z&page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {"key": "date_from", "value": "2026-01-01T00:00:00Z"},
+                {"key": "date_to", "value": "2026-02-01T00:00:00Z"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /transactions/:id (detail)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/transactions/txn-demo-001",
+            "description": "Returns full transaction detail including event history and merchant info."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Has merchant', () => pm.expect(r.merchant).to.be.an('object'));",
+                  "pm.test('Has events array', () => pm.expect(r.events).to.be.an('array'));",
+                  "pm.test('Status is settled', () => pm.expect(r.status).to.eql('settled'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /transactions/:id (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/transactions/nonexistent-transaction-id"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["pm.test('404 not found', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation",
+      "item": [
+        {
+          "name": "GET /reconciliation/summary?group_by=merchant",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/summary?group_by=merchant",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "summary"],
+              "query": [{"key": "group_by", "value": "merchant"}]
+            },
+            "description": "Returns per-merchant transaction counts and totals."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('group_by=merchant', () => pm.expect(pm.response.json().group_by).to.eql('merchant'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /reconciliation/summary?group_by=date",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/summary?group_by=date",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "summary"],
+              "query": [{"key": "group_by", "value": "date"}]
+            }
+          }
+        },
+        {
+          "name": "GET /reconciliation/summary?group_by=status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/summary?group_by=status",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "summary"],
+              "query": [{"key": "group_by", "value": "status"}]
+            }
+          }
+        },
+        {
+          "name": "GET /reconciliation/summary (date range filter)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/summary?group_by=merchant&date_from=2026-01-01T00:00:00Z&date_to=2026-03-01T00:00:00Z",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "summary"],
+              "query": [
+                {"key": "group_by", "value": "merchant"},
+                {"key": "date_from", "value": "2026-01-01T00:00:00Z"},
+                {"key": "date_to", "value": "2026-03-01T00:00:00Z"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /reconciliation/discrepancies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/discrepancies?page=1&page_size=10",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "discrepancies"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "10"}
+              ]
+            },
+            "description": "Returns transactions with inconsistent payment/settlement state."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Has total > 0', () => pm.expect(r.total).to.be.above(0));",
+                  "pm.test('Each item has discrepancy_reason', () => r.items.forEach(i => pm.expect(i.discrepancy_reason).to.be.a('string')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /reconciliation/discrepancies (filter by merchant)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/reconciliation/discrepancies?merchant_id=merchant_1&page=1&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["reconciliation", "discrepancies"],
+              "query": [
+                {"key": "merchant_id", "value": "merchant_1"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "5"}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
